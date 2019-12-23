@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# prints help
+function help()
+{
+  echo "Usage:
+  -h                  Prints this message.
+  -L [LOCATION]       Fetches geodata (lat, long) for the LOCATION.
+                      Note: Internet access required!
+                        Always use quotation marks!
+  -d [DURATION]       Overrides the default duration of the gps signal file.
+  -f [FILE]           Use unpacked broadcast file.
+                        File can be aquired at ftp://cddis.gsfc.nasa.gov/gnss/data/daily/2019/brdc.
+                        Make sure to always use the latest one.
+  -g                  Automatically download the latest broadcast file.
+                        Internet access is required.
+  -l [LAT,LONG]       Set the lat/long coordination values. Both values have to be specified.
+                        Elevation is always 100 meters
+  -o [FILE]           Binary output file. Default is /tmp/gpssim.bin.
+
+  Examples:
+    ./gps-gen-sig -L \"los angeles\" -g -o gpssim.bin
+    ./gps-gen-sig -l \"30.286502,120.032669\" -f brdc3570.19n -o gpssim.bin
+
+
+  Note: This scripts does currently NOT support user motion files such as NMEA streams."
+  exit 0
+}
+
+# defaults
+AUTH=" "          # 👈 enter opencagedata API key here
+LAT=" "           # lat
+LONG=" "          # long
+ELEV="100"        # default elevation
+DUR="400"         # default duration
+BRDC=" "          # broadcast file
+OUT="/tmp/gpssim.bin"  # output file
+
+# automatically download the latest broadcast file from the nasa servers
+function getFile()
+{
+  echo "[+] preparing to fetch latest broadcast file"
+	set -eu
+	current_year=$(date +%Y)
+  echo "[+] attempting to download latest broadcast file, this might take a while..."
+
+  latest_version=$(wget -qO- "ftp://cddis.gsfc.nasa.gov/gnss/data/daily/$current_year/brdc/" | awk -F'/brdc*/' '/brdc*/{print $2}' | cut -d\" -f1 | grep -v '\index.html' | tail -1)
+
+  if [ "$latest_version" =  "" ]; then
+    echo "[-] error while downloading latest broadcast file"
+    exit 0
+  fi
+
+  if [ ! -f	"${latest_version::-2}" ]; then
+    wget -q "ftp://cddis.gsfc.nasa.gov/gnss/data/daily/$current_year/brdc/$latest_version"
+    uncompress "$latest_version"
+  fi
+
+	setFile "${latest_version::-2}"
+  echo "[+] successfully downloaded latest broadcast file..."
+}
+
+# saves the file path
+function setFile()
+{
+  if [ -f "$1" ]; then
+    BRDC=$1
+  else
+    echo "[-] Error: ($1) is no valid file"
+    exit 0
+  fi
+}
+
+# get city coordinates using geocagedata api
+function getLocation()
+{
+  if [[ "$AUTH" = " " ]]; then
+    echo "[-] set opencagedata API token first..."
+    exit 0
+  fi
+
+  LOCATION=$(echo "$1" | \
+  sed  -e 's/Ä/ae/g' \
+       -e 's/ä/ae/g' \
+       -e 's/Ö/oe/g' \
+       -e 's/ö/oe/g' \
+       -e 's/Ü/ue/g' \
+       -e 's/ü/ue/g' \
+       -e 's/ß/ss/g')
+  echo "[+] fetching geodata for \"$LOCATION\"..."
+  LOCATION=${LOCATION// /%20} # replace empty spaces to %20 html code
+  TOTAL_RESULTS=$(curl -s "https://api.opencagedata.com/geocode/v1/json?q=$LOCATION&key=$AUTH&language=de&pretty=1" | python3 -c "import sys, json; s=json.load(sys.stdin); print(s['total_results'])") 2>/dev/null
+  if [ "$TOTAL_RESULTS" = 0 ]; then
+    echo "[-] location '$1' could not be found!"
+    exit 0
+  fi
+  LAT=$(curl -s "https://api.opencagedata.com/geocode/v1/json?q=$LOCATION&key=$AUTH&language=de&pretty=1" | python3 -c "import sys, json; s=json.load(sys.stdin); print(s['results'][0]['bounds']['northeast']['lat'])") 2>/dev/null
+  LONG=$(curl -s "https://api.opencagedata.com/geocode/v1/json?q=$LOCATION&key=$AUTH&language=de&pretty=1" | python3 -c "import sys, json; s=json.load(sys.stdin); print(s['results'][0]['bounds']['northeast']['lng'])") 2>/dev/null
+  echo "[+] geodata successfully fetched..."
+}
+
+# sets the coordinates
+# does not do type checking
+function setCoord()
+{
+  if [[ "$1" != *","* ]];then
+    echo "[-] aborting, wrong format for coordinates..."
+    exit 0
+  fi
+  IFS=","
+  read -r lat long <<< "$1"
+  LAT=$lat
+  LONG=$long
+}
+
+# get opts
+while getopts hgL:d:f:l:o: opt 2>/dev/null
+do
+  case $opt in
+    h) help;;
+    L) getLocation "$OPTARG";;
+    d) DUR="$OPTARG";;
+    f) setFile "$OPTARG";;
+		g) getFile;;
+    l) setCoord "$OPTARG";;
+    o) OUT="$OPTARG";;
+    ?) help;;
+  esac
+done
+
+# if no args were passed
+if [ $OPTIND -eq 1 ];then
+  help
+fi
+
+# check if all variables are set
+if [ "${LAT}" == " " ] ;then
+  echo "[-] Error: You have to either choose a location [-L LOCATION] or specify the coordinates [-l LAT,LONG] yourself."
+  exit 0
+elif [ "${BRDC}" == " " ]; then
+  echo "[-] Error: You forgot to set the broadcast file [-f FILE]. Try [-g] instead to automatically fetch it from the server."
+  exit 0
+fi
+
+# generate the signal
+echo "[+] start generating..."
+../gps-sdr-sim/gps-sdr-sim -e "${BRDC}" -l "${LAT},${LONG},${ELEV}" -b 8 -d "${DUR}" -o "${OUT}"
+echo "[+] successfully generated signal file"
+rm "$BRDC"
+echo "[+] clean up"

@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# prints help
+function help()
+{
+  echo "Usage:
+  -h              Prints this help and exits.
+  -f [FILE]       Change binary signal file from default [/tmp/gpssim.bin] to FILE.
+  -g [GAIN]       Changes the default gain value [0] to GAIN.
+  -r              Infinite Loop.
+  -q              Disable terminal output."
+  exit 0
+}
+
+# defaults
+GAIN=0
+FILE="/tmp/gpssim.bin"
+LOOP=false
+QUIET=false
+STOP=false
+
+trap stop_loop INT
+
+function stop_loop()
+{
+  if [ "$LOOP" = true ];then
+    echo "[+] shutting down"
+    STOP=true
+  fi
+}
+
+# get opts
+while getopts hrqf:g: opt 2>/dev/null
+do
+  case $opt in
+    h) help;;
+    f) FILE="$OPTARG";;
+    g) GAIN="$OPTARG";;
+    r) LOOP=true;;
+    q) QUIET=true;;
+    ?) help;;
+  esac
+done
+
+
+# if no args were passed
+if [ $OPTIND -eq 1 ];then
+  if [ ! -f $FILE ]; then
+    help
+    exit 0
+  fi
+fi
+
+# check file
+if [[ ! -f "$FILE" ]] || [[ "$FILE" = " " ]]; then
+  echo "[-] Error: $FILE is no valid file!"
+  exit 0
+fi
+
+# execute spoofing
+if [ "$LOOP" = true ]; then
+  while true
+  do
+    if [ "$STOP" = true ]; then
+      break
+    fi
+    if [ "$QUIET" = true ]; then
+      echo "[+] start transmit in quiet mode - hit ctrl+c top stop"
+      hackrf_transfer -t "$FILE" -f 1575420000 -s 2600000 -a 1 -x "$GAIN" 2>/dev/null
+    else
+      echo "[+] start transmit..."
+      hackrf_transfer -t "$FILE" -f 1575420000 -s 2600000 -a 1 -x "$GAIN"
+    fi
+  done
+else
+  if [ "$QUIET" = true ]; then
+    echo "[+] start transmit in quiet mode - hit ctrl+c top stop"
+    hackrf_transfer -t "$FILE" -f 1575420000 -s 2600000 -a 1 -x "$GAIN" 2>/dev/null
+  else
+    echo "[+] start transmit..."
+    hackrf_transfer -t "$FILE" -f 1575420000 -s 2600000 -a 1 -x "$GAIN"
+  fi
+fi
+
