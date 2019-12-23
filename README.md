@@ -63,5 +63,5 @@ Use the `gps-spoof` script to transmit files using a HackRF One.
 
 Example:
 ```bash
-./gps-spoof -f
+./gps-spoof -f gpssim.bin
 ```
