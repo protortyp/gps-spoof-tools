@@ -51,8 +51,8 @@ In order to generate new GPS signals use the `gps-gen-sig` script. It comes with
 
 Examples:
 ```bash
-    ./gps-gen-sig -L \"Berlin Germany\" -g
-    ./gps-gen-sig -l \"30.286502,120.032669\" -f brdc3570.19n -o gpssim.bin
+    ./gps-gen-sig -L "Berlin Germany" -g
+    ./gps-gen-sig -l "30.286502,120.032669" -f brdc3570.19n -o gpssim.bin
 ```
 
 If not specified otherwise the script will store the generated GPS signal file at `/tmp/gpssim.bin`. You might want to set it to an external storage device as these files can get large pretty fast, depending on the duration.
