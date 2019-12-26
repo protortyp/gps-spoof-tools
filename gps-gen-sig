@@ -40,23 +40,23 @@ OUT="/tmp/gpssim.bin"  # output file
 function getFile()
 {
   echo "[+] preparing to fetch latest broadcast file"
-	set -eu
-	current_year=$(date +%Y)
+  set -eu
+  current_year=$(date +%Y)
   echo "[+] attempting to download latest broadcast file, this might take a while..."
 
   latest_version=$(wget -qO- "ftp://cddis.gsfc.nasa.gov/gnss/data/daily/$current_year/brdc/" | awk -F'/brdc*/' '/brdc*/{print $2}' | cut -d\" -f1 | grep -v '\index.html' | tail -1)
 
-  if [ "$latest_version" =  "" ]; then
+  if [ "$latest_version" = "" ]; then
     echo "[-] error while downloading latest broadcast file"
     exit 0
   fi
 
-  if [ ! -f	"${latest_version::-2}" ]; then
+  if [ ! -f "${latest_version::-2}" ]; then
     wget -q "ftp://cddis.gsfc.nasa.gov/gnss/data/daily/$current_year/brdc/$latest_version"
     uncompress "$latest_version"
   fi
 
-	setFile "${latest_version::-2}"
+  setFile "${latest_version::-2}"
   echo "[+] successfully downloaded latest broadcast file..."
 }
 
@@ -121,7 +121,7 @@ do
     L) getLocation "$OPTARG";;
     d) DUR="$OPTARG";;
     f) setFile "$OPTARG";;
-		g) getFile;;
+    g) getFile;;
     l) setCoord "$OPTARG";;
     o) OUT="$OPTARG";;
     ?) help;;
